@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hand Gesture 3D Drawing</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background-color: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 5px;
+      z-index: 100;
+    }
+    #instructions {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      color: white;
+      background-color: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 300px;
+      z-index: 100;
+    }
+    .toolbar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      z-index: 100;
+    }
+    .tool-btn {
+      padding: 8px 12px;
+      background-color: rgba(0,0,0,0.7);
+      color: white;
+      border: 1px solid #444;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tool-btn:hover {
+      background-color: rgba(50,50,50,0.7);
+    }
+    .tool-btn.active {
+      background-color: rgba(0,150,255,0.7);
+      border-color: rgba(0,150,255,0.9);
+    }
+    #camera-feed {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      width: 200px;
+      border: 2px solid white;
+      border-radius: 5px;
+      display: none;
+      z-index: 99;
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button class="tool-btn active" id="box">Box</button>
+  <button class="tool-btn" id="sphere">Sphere</button>
+  <button class="tool-btn" id="cylinder">Cylinder</button>
+  <button class="tool-btn" id="cone">Cone</button>
+  <button class="tool-btn" id="torus">Torus</button>
+  <button class="tool-btn" id="pyramid">Pyramid</button>
+  <button class="tool-btn" id="pencil">Pencil</button>
+  <button class="tool-btn active" id="chalk">Chalk</button>
+  <button class="tool-btn" id="clear">Clear All</button>
+  <button class="tool-btn" id="debug">Debug View</button>
+</div>
+
+<div id="status">Connecting to server...</div>
+<div id="instructions">
+  <h3>Controls:</h3>
+  <p><strong>Open Hand (3+ fingers):</strong> Move ghost shape</p>
+  <p><strong>Fist (0 fingers):</strong> Place shape</p>
+  <p><strong>Index Finger Extended (1 finger):</strong> Draw freely</p>
+  <p><strong>Thumb Up:</strong> Red color</p>
+  <p><strong>Thumb Down:</strong> Blue color</p>
+  <p><strong>Neutral Thumb:</strong> Cyan color</p>
+  <p><strong>Pinch (2 fingers):</strong> Zoom in/out</p>
+  <p><strong>Two Fingers:</strong> Rotate view</p>
+</div>
+
+<video id="camera-feed" autoplay playsinline muted></video>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/"
+    }
+  }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// Three.js scene setup
+let scene, camera, renderer, controls;
+let shapes = [], trails = [], pencilActive = false, chalkActive = true, currentShape = 'box';
+let ghostMesh = null, currentTrail = null, chalkTrail = null;
+let currentColor = 0x00ffff;
+let socket;
+let placingEnabled = false;
+let lastPosition = new THREE.Vector3(0, 0, 0); // Use Vector3 for consistency
+let zoomSensitivity = 0.02; // Adjusted zoom sensitivity
+let rotationEnabled = false;
+let selectedShape = null;
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+let debugMode = false;
+const cameraFeed = document.getElementById('camera-feed');
+
+// Initialize everything
+initThree();
+setupSocket();
+setupButtons();
+setupInteraction();
+animate();
+
+function initThree() {
+  // Scene setup
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x111111);
+
+  // Camera setup
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 0, 15);
+
+  // Renderer setup
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0x404040);
+  scene.add(ambientLight);
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  directionalLight.position.set(5, 5, 5);
+  directionalLight.castShadow = true;
+  scene.add(directionalLight);
+
+  // Controls
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.enabled = false;
+
+  // Grid helper
+  const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+  scene.add(gridHelper);
+
+  // Window resize handler
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+
+function setupSocket() {
+  socket = io('http://localhost:8001');
+
+  socket.on('connect', () => {
+    console.log("Connected to server");
+    document.getElementById('status').textContent = 'Connected - Waiting for hand detection...';
+  });
+
+  socket.on('connect_error', () => {
+    document.getElementById('status').textContent = 'Connection failed. Is server running?';
+  });
+
+  socket.on('camera_error', (data) => {
+    console.error("Camera error:", data.message);
+    document.getElementById('status').textContent = 'Camera Error: ' + data.message;
+  });
+
+  socket.on('gesture_data', (data) => {
+    document.getElementById('status').textContent =
+      `Tracking: ${data.gesture} | Fingers: ${data.finger_count} | Angle: ${Math.round(data.thumb_angle)}°`;
+    handleGesture(data.gesture, data.position, data.thumb_angle, data.finger_count, data.index_tip, data.pinch_distance);
+  });
+}
+
+function setupButtons() {
+  const buttons = document.querySelectorAll('.tool-btn');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      buttons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      if (btn.id === 'clear') {
+        clearScene();
+      } else if (btn.id === 'pencil') {
+        pencilActive = true;
+        chalkActive = false;
+        currentShape = null;
+        if (ghostMesh) {
+          scene.remove(ghostMesh);
+          ghostMesh = null;
+        }
+      } else if (btn.id === 'chalk') {
+        chalkActive = true;
+        pencilActive = false;
+        currentShape = null;
+        if (ghostMesh) {
+          scene.remove(ghostMesh);
+          ghostMesh = null;
+        }
+      } else if (btn.id === 'debug') {
+        debugMode = !debugMode;
+        cameraFeed.style.display = debugMode ? 'block' : 'none';
+        btn.classList.toggle('active', debugMode);
+        setupDebugCameraFeed();
+      } else {
+        pencilActive = false;
+        chalkActive = false;
+        currentShape = btn.id;
+        updateGhost();
+      }
+    });
+  });
+}
+
+function setupDebugCameraFeed() {
+  if (debugMode) {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          cameraFeed.srcObject = stream;
+        })
+        .catch(err => {
+          console.error("Couldn't access camera for debug view:", err);
+        });
+    }
+  } else if (cameraFeed.srcObject) {
+    cameraFeed.srcObject.getTracks().forEach(track => track.stop());
+    cameraFeed.srcObject = null;
+  }
+}
+
+function setupInteraction() {
+  window.addEventListener('click', (event) => {
+    if (!rotationEnabled) return;
+
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(shapes);
+
+    if (intersects.length > 0) {
+      if (selectedShape) {
+        selectedShape.material.color.setHex(currentColor);
+      }
+      selectedShape = intersects[0].object;
+      selectedShape.material.color.set(0xffff00);
+    } else if (selectedShape) {
+      selectedShape.material.color.setHex(currentColor);
+      selectedShape = null;
+    }
+  });
+}
+
+function clearScene() {
+  shapes.forEach(shape => scene.remove(shape));
+  shapes = [];
+  trails.forEach(trail => scene.remove(trail));
+  trails = [];
+  if (selectedShape) selectedShape = null;
+  if (currentTrail) {
+    scene.remove(currentTrail);
+    currentTrail = null;
+  }
+  if (chalkTrail) {
+    scene.remove(chalkTrail);
+    chalkTrail = null;
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+function handleGesture(gesture, position, thumb_angle, finger_count, index_tip, pinch_distance) {
+  // Update color based on thumb angle
+  if (thumb_angle > 45) {
+    currentColor = 0xff0000; // Red
+  } else if (thumb_angle < -45) {
+    currentColor = 0x0000ff; // Blue
+  } else {
+    currentColor = 0x00ffff; // Cyan
+  }
+
+  // Map normalized coordinates to a wider 3D space
+  const x = (position.x - 0.5) * 30; // Adjust multiplier for spread
+  const y = (0.5 - position.y) * 20; // Adjust multiplier for spread
+  const z = (position.z - 0.5) * 15; // Adjust multiplier for depth
+  lastPosition.set(x, y, z); // Update lastPosition with the mapped coordinates
+
+  // Convert index tip position if available
+  let indexPos = null;
+  if (index_tip) {
+    indexPos = {
+      x: (index_tip.x - 0.5) * 30,
+      y: (0.5 - index_tip.y) * 20,
+      z: (index_tip.z - 0.5) * 15
+    };
+  }
+
+  // Rotation mode (two fingers)
+  rotationEnabled = finger_count === 2;
+  controls.enabled = rotationEnabled;
+
+  // Pinch to Zoom
+  if (gesture === 'pinch' && pinch_distance !== undefined) {
+    const zoomChange = (0.5 - pinch_distance) * 5; // Adjust multiplier for sensitivity
+    camera.position.z += zoomChange;
+    camera.position.z = Math.max(5, Math.min(30, camera.position.z));
+    controls.enabled = false; // Disable OrbitControls during pinch
+  } else if (finger_count !== 2) {
+    controls.enabled = true; // Enable OrbitControls when not rotating or pinching
+  }
+
+  // Chalk mode (only index finger extended)
+  if (chalkActive && gesture === 'chalk' && index_tip) {
+    if (!chalkTrail) {
+      chalkTrail = new THREE.Group();
+      scene.add(chalkTrail);
+      trails.push(chalkTrail);
+    }
+    addChalkPoint(indexPos.x, indexPos.y, indexPos.z);
+    return;
+  } else if (chalkActive && chalkTrail) {
+    chalkTrail = null;
+  }
+
+  // Shape placement logic
+  if (gesture === 'open' && finger_count >= 3) {
+    if (!placingEnabled) {
+      placingEnabled = true;
+      if (!pencilActive && !chalkActive) {
+        updateGhost();
+      } else if (pencilActive && indexPos) {
+        // Start new pencil trail
+        if (currentTrail) {
+          trails.push(currentTrail);
+        }
+        currentTrail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: currentColor }));
+        scene.add(currentTrail);
+        currentTrail.userData.points = [];
+        currentTrail.userData.points.push(new THREE.Vector3(indexPos.x, indexPos.y, indexPos.z));
+        currentTrail.geometry.setFromPoints(currentTrail.userData.points);
+      }
+    }
+
+    // Update ghost position or add to pencil trail
+    if (!pencilActive && !chalkActive && ghostMesh) {
+      ghostMesh.position.copy(lastPosition);
+      ghostMesh.material.color.setHex(currentColor);
+    } else if (pencilActive && currentTrail && indexPos) {
+      const lastPoint = currentTrail.userData.points[currentTrail.userData.points.length - 1];
+      if (lastPoint && lastPoint.distanceTo(new THREE.Vector3(indexPos.x, indexPos.y, indexPos.z)) > 0.1) {
+        currentTrail.userData.points.push(new THREE.Vector3(indexPos.x, indexPos.y, indexPos.z));
+        currentTrail.geometry.setFromPoints(currentTrail.userData.points);
+        currentTrail.geometry.needsUpdate = true;
+      }
+    }
+  }
+  else if (gesture === 'fist' && placingEnabled) {
+    if (!pencilActive && !chalkActive && ghostMesh && currentShape) {
+      placeShape(lastPosition); // Use the updated lastPosition for placement
+    }
+    placingEnabled = false;
+
+    // Finish current pencil trail
+    if (pencilActive && currentTrail) {
+      trails.push(currentTrail);
+      currentTrail = null;
+    }
+  }
+}
+
+function addChalkPoint(x, y, z) {
+  if (!chalkTrail) return;
+
+  // Create a chalk mark (small circle)
+  const chalkGeometry = new THREE.CircleGeometry(0.15, 16);
+  const chalkMaterial = new THREE.MeshBasicMaterial({
+    color: currentColor,
+    side: THREE.DoubleSide
+  });
+  const chalkMark = new THREE.Mesh(chalkGeometry, chalkMaterial);
+
+  // Orient the chalk mark to face the camera
+  chalkMark.lookAt(camera.position);
+  chalkMark.position.set(x, y, z);
+
+  chalkTrail.add(chalkMark);
+}
+
+function addPencilPoint(x, y, z) {
+  if (!currentTrail) return;
+
+  currentTrail.geometry.setFromPoints([...(currentTrail.userData.points|| []), new THREE.Vector3(x, y, z)]);
+  currentTrail.geometry.needsUpdate = true;
+  if (!currentTrail.userData.points) {
+    currentTrail.userData.points = [];
+  }
+  currentTrail.userData.points.push(new THREE.Vector3(x, y, z));
+}
+
+function updateGhost() {
+  if (ghostMesh) {
+    scene.remove(ghostMesh);
+  }
+
+  if (!currentShape || pencilActive || chalkActive) return;
+
+  const material = new THREE.MeshStandardMaterial({
+    color: currentColor,
+    opacity: 0.5,
+    transparent: true,
+    emissive: 0x111111,
+    metalness: 0.2,
+    roughness: 0.7
+  });
+
+  let geometry;
+  switch(currentShape) {
+    case 'box':
+      geometry = new THREE.BoxGeometry(1, 1, 1);
+      break;
+    case 'sphere':
+      geometry = new THREE.SphereGeometry(0.5, 32, 32);
+      break;
+    case 'cylinder':
+      geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+      break;
+    case 'cone':
+      geometry = new THREE.ConeGeometry(0.5, 1, 32);
+      break;
+    case 'torus':
+      geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 32);
+      break;
+    case 'pyramid':
+      geometry = new THREE.ConeGeometry(0.8, 1, 4);
+      break;
+  }
+
+  if (geometry) {
+    ghostMesh = new THREE.Mesh(geometry, material);
+    ghostMesh.position.copy(lastPosition);
+    ghostMesh.castShadow = true;
+    scene.add(ghostMesh);
+  }
+}
+
+function placeShape(position) {
+  if (!currentShape || pencilActive || chalkActive) return;
+
+  const material = new THREE.MeshStandardMaterial({
+    color: currentColor,
+    metalness: 0.3,
+    roughness: 0.4,
+    emissive: 0x000000
+  });
+
+  let geometry;
+  switch(currentShape) {
+    case 'box':
+      geometry = new THREE.BoxGeometry(1, 1, 1);
+      break;
+    case 'sphere':
+      geometry = new THREE.SphereGeometry(0.5, 32, 32);
+      break;
+    case 'cylinder':
+      geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+      break;
+    case 'cone':
+      geometry = new THREE.ConeGeometry(0.5, 1, 32);
+      break;
+    case 'torus':
+      geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 32);
+      break;
+    case 'pyramid':
+      geometry = new THREE.ConeGeometry(0.8, 1, 4);
+      break;
+  }
+
+  if (geometry) {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(position); // Use the provided position (which is now lastPosition)
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    shapes.push(mesh);
+  }
+}
+</script>
+</body>
+</html>

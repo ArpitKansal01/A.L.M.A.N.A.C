@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>JARVIS Interface Boot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body, html {
+      height: 100%;
+      background: radial-gradient(circle, #050c1a 0%, #000000 100%);
+      overflow: hidden;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .overlay {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      color: #00ffff;
+      font-size: 3rem;
+      text-align: center;
+      letter-spacing: 5px;
+      animation: fadeOut 4s forwards;
+      text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff66;
+      z-index: 1000;
+      position: relative;
+    }
+
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { opacity: 0; display: none; }
+    }
+
+    .glitch {
+      position: relative;
+      display: inline-block;
+    }
+
+    .glitch::before, .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      left: 0;
+      width: 100%;
+      overflow: hidden;
+      clip: rect(0, 900px, 0, 0);
+    }
+
+    .glitch::before {
+      animation: glitchTop 1.5s infinite linear;
+      color: #ff00ff;
+      z-index: -1;
+    }
+
+    .glitch::after {
+      animation: glitchBottom 1.5s infinite linear;
+      color: #00ff00;
+      z-index: -2;
+    }
+
+    @keyframes glitchTop {
+      0% { clip: rect(0, 9999px, 0, 0); }
+      5% { clip: rect(0, 9999px, 10px, 0); }
+      10% { clip: rect(0, 9999px, 0, 0); }
+      15% { clip: rect(0, 9999px, 15px, 0); }
+      20% { clip: rect(0, 9999px, 0, 0); }
+      100% { clip: rect(0, 9999px, 0, 0); }
+    }
+
+    @keyframes glitchBottom {
+      0% { clip: rect(0, 9999px, 0, 0); }
+      5% { clip: rect(5px, 9999px, 20px, 0); }
+      10% { clip: rect(0, 9999px, 0, 0); }
+      15% { clip: rect(10px, 9999px, 25px, 0); }
+      20% { clip: rect(0, 9999px, 0, 0); }
+      100% { clip: rect(0, 9999px, 0, 0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <div class="glitch" data-text="BOOTING A.L.M.A.N.AC">BOOTING  A.L.M.A.N.AC</div>
+  </div>
+
+<script>
+        setTimeout(function() {
+    window.location.href = "web.html";
+  }, 4000);
+    </script>
+</body>
+</html>
