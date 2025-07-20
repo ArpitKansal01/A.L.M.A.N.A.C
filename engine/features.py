@@ -176,7 +176,7 @@ def whatsApp(mobile_no, message, flag, name):
 def chatBot(query):
     import google.generativeai as genai
     from google.generativeai.types import GenerationConfig
-    genai.configure(api_key="AIzaSyDME1zikC3YA5ZCg2R6Q6iPMoMAJrfWk6E")
+    genai.configure(api_key="")
     try:
         
         model = genai.GenerativeModel("gemini-2.0-flash")
