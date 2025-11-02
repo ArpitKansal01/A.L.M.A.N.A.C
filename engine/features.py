@@ -75,7 +75,7 @@ def PlayYoutube(query):
     speak("Playing "+search_term+" on YouTube")
     kit.playonyt(search_term)  
 
-def hotword():
+
     porcupine=None
     paud=None
     audio_stream=None

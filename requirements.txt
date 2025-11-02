@@ -36,5 +36,3 @@ google-generativeai==0.7.2
 
 # --- Miscellaneous ---
 matplotlib==3.9.2
-pyaudio==0.2.14
-sounddevice==0.4.6
