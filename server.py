@@ -11,8 +11,6 @@ from dotenv import load_dotenv
 load_dotenv()
 app = Flask(__name__, static_folder='UI', static_url_path='')
 
-
-
 # MySQL connection configuration
 def get_db_connection():
     connection = mysql.connector.connect(
@@ -23,8 +21,6 @@ def get_db_connection():
         database=os.environ.get("database")
     )
     return connection
-
-
 
 @app.route('/')
 def index():
@@ -46,23 +42,20 @@ def sign_up():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 👉 Check if the user already exists
     cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
     existing_user = cursor.fetchone()
 
     if existing_user:
         cursor.close()
         conn.close()
-        return jsonify({"message": "User already exists!"}), 409  # Conflict status code
+        return jsonify({"message": "User already exists!"}), 409
 
-    # 👉 If not exists, insert the new user
     cursor.execute('INSERT INTO users (name, email, password) VALUES (%s, %s, %s)', 
                    (name, email, password))
     conn.commit()
 
     cursor.close()
     conn.close()
-
     return jsonify({"message": "User created successfully!"})
 
 @app.route('/login', methods=['POST'])
@@ -80,10 +73,7 @@ def login():
     if user:
         return jsonify({"message": "Login successful!"})
     else:
-        return jsonify({"message": "Invalid email or password!"}), 401  # Unauthorized
-
-def open_browser():
-    webbrowser.open_new('http://127.0.0.1:5000/')
+        return jsonify({"message": "Invalid email or password!"}), 401
 
 classDictionary = {"Arpit_Kansal": 0, "Daljeet_Kaur": 1, "Ishani_Dutt": 2, "Kashish_Gupta": 3, "Tevik_Rathore": 4}
 
@@ -91,23 +81,18 @@ classDictionary = {"Arpit_Kansal": 0, "Daljeet_Kaur": 1, "Ishani_Dutt": 2, "Kash
 def verify_face():
     image_data = request.form['image_data']
 
-    # Save the base64 data to b64.txt
     with open('b64.txt', 'w') as f:
         f.write(image_data)
 
-    # Run classification
     result = util.classify_image(image_data)
-    print(result)
     if not result:
         return jsonify({'success': False, 'message': 'No face detected.'})
 
     best_result = result[0]
-    top_confidence = max(best_result['class_probability'])  # Highest probability
-    predicted_class_name = best_result['class']  # The predicted class index
+    top_confidence = max(best_result['class_probability'])
+    predicted_class_name = best_result['class']
 
     if top_confidence >= 50.0:
-        # Now map index to name using class_dictionary
-        print(f"Recognized: {predicted_class_name} with confidence: {top_confidence}%")
         return jsonify({'success': True, 'name': predicted_class_name})
     else:
         return jsonify({'success': False})
@@ -115,14 +100,16 @@ def verify_face():
 @app.route('/run_assistant', methods=['POST'])
 def run_assistant():
     try:
-        subprocess.Popen(['python', 'run.py'])  # Runs assistant.py without blocking
+        subprocess.Popen(['python', 'run.py'])
         return jsonify({'message': 'Assistant started successfully!'})
     except Exception as e:
         return jsonify({'message': f'Error starting assistant: {str(e)}'}), 500
 
+
+# ✅ Render-compatible server startup
 if __name__ == '__main__':
     print("Starting Python Flask Server for facial recognition...")
     util.load_saved_artifacts()
-    # Open the browser after a slight delay
-    threading.Timer(1.25, open_browser).start()
-    app.run(port=5000)
+    
+    port = int(os.environ.get("PORT", 5000))  # Use Render's dynamic port
+    app.run(host="0.0.0.0", port=port)
