@@ -3,7 +3,11 @@ import eel
 import os
 import webbrowser
 from engine.command import speak
-import pywhatkit as kit
+try:
+    import pywhatkit as kit
+except Exception as e:
+    print("[Render] pywhatkit disabled:", e)
+    kit = None
 import re
 import sqlite3
 from engine.helper import extract_yt_term
@@ -73,7 +77,11 @@ def openCommand(query):
 def PlayYoutube(query):
     search_term = extract_yt_term(query)
     speak("Playing "+search_term+" on YouTube")
-    kit.playonyt(search_term)  
+    if kit:
+        kit.playonyt(search_term) 
+    else:
+        print("[Render] Skipping pywhatkit feature (no GUI support)")
+     
 
 
     porcupine=None
