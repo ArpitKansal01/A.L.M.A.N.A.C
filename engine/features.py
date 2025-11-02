@@ -12,7 +12,11 @@ import re
 import sqlite3
 from engine.helper import extract_yt_term
 import pvporcupine
-import pyaudio
+try:
+    import pyaudio
+except Exception as e:
+    print("[Render] PyAudio disabled:", e)
+    pyaudio = None
 import struct
 import time
 from engine.helper import remove_words
