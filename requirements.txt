@@ -7,7 +7,6 @@ gevent==23.9.1
 
 # --- Database ---
 mysql-connector-python==9.1.0
-sqlite3-binary==0.0.1  # For local sqlite usage
 
 # --- Machine Learning / Image Processing ---
 opencv-python==4.10.0.84
