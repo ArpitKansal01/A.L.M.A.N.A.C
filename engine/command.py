@@ -4,7 +4,7 @@ import eel
 import time
 import subprocess
 import os 
-
+i = 1
 def speak(text):
     text = str(text)
     engine = pyttsx3.init('sapi5')
@@ -18,8 +18,9 @@ def speak(text):
     engine.runAndWait()
 
 def takecommand():
-    speak("Hello, I am Almanac. How can I help you?")
-
+    if(i==1):
+        speak("Hello, I am Almanac. How can I help you?")
+        i+=1
     r = sr.Recognizer()
     mic_index = 2  # ✅ Use your working mic index here
 

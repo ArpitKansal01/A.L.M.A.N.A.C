@@ -6,9 +6,8 @@ import os
 import webbrowser
 import threading
 import subprocess
-from dotenv import load_dotenv
 
-load_dotenv()
+
 app = Flask(__name__, static_folder='UI', static_url_path='')
 
 
@@ -16,15 +15,12 @@ app = Flask(__name__, static_folder='UI', static_url_path='')
 # MySQL connection configuration
 def get_db_connection():
     connection = mysql.connector.connect(
-        host=os.environ.get("host"),
-        port=os.environ.get("port"),
-        user=os.environ.get("user"),
-        password=os.environ.get("password"),
-        database=os.environ.get("database")
+        host='localhost',    # Change to your MySQL server if it's not on localhost
+        user='root',         # Your MySQL username
+        password='root', # Your MySQL password
+        database='Users' # Your database name
     )
     return connection
-
-
 
 @app.route('/')
 def index():

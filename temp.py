@@ -1,8 +1,18 @@
-import mediapipe as mp
+import mysql.connector
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 try:
-    print("Testing MediaPipe Hands...")
-    hands = mp.solutions.hands.Hands()
-    print("MediaPipe Hands loaded successfully!")
-except Exception as e:
-    print("Error loading MediaPipe:", e)
+    conn = mysql.connector.connect(
+        host=os.environ.get("host"),
+        port=os.environ.get("port"),
+        user=os.environ.get("user"),
+        password=os.environ.get("password"),
+        database=os.environ.get("database")
+    )
+    print("✅ Connected to MySQL successfully!")
+    conn.close()
+except mysql.connector.Error as err:
+    print(f"❌ Error: {err}")
